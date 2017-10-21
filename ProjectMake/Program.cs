@@ -14,6 +14,8 @@ namespace ProjectMake
             var p = new FluentCommandLineParser();
             string projectName = "";
             string directory = Directory.GetCurrentDirectory();
+            bool js = false;
+
             directory = Path.GetFullPath(Path.Combine(directory, "..\\"));
             p.Setup<string>('p', "project")
              .Callback(value => projectName = value)
@@ -22,40 +24,79 @@ namespace ProjectMake
             p.Setup<string>('d', "dir")
              .Callback(value => directory = value);
 
+            p.Setup<bool>('a', "apps")
+             .Callback(value => js = value);
+
+            p.SetupHelp("?", "h", "help")
+             .Callback(value => {
+                 Console.WriteLine("-p, -project: Project Name\n" +
+                    "-d, -dir: Target directory to create the project\n" +
+                    "-a, -app: Include javascript frontend App\n");
+             });
+
             var result = p.Parse(args);
 
             if (!result.HasErrors)
             {
-                // use the instantiated ApplicationArguments object from the Object property on the parser.
-                Run(projectName, directory);
-            }
-        }
+                if (string.IsNullOrEmpty(projectName))
+                {
+                    Console.Write("Project Name:");
+                    projectName = Console.ReadLine();
+                    Console.Write("Directory Name [default: {0}]:", directory);
+                    string dir = Console.ReadLine();
+                    Console.WriteLine();
+                    Console.Write("Create javascript app? (yes/no):");
+                    string apps = Console.ReadLine()?.ToLower().Trim();
 
-        static void Run(string projectName, string targetDir)
-        {
-            string appDir = AppContext.BaseDirectory;
-            string sourceZip = appDir + "blank.zip";
-            string appsZip = appDir + "apps.zip";
-            string destProjectDir = Path.Combine(targetDir, projectName);
+                    if (!string.IsNullOrEmpty(apps))
+                    {
+                        if (apps == "y" || apps == "yes" || apps == "true")
+                        {
+                            js = true;
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(dir))
+                    {
+                        directory = dir;
+                    }
 
-            if(!Directory.Exists(destProjectDir))
-            {
-                Directory.CreateDirectory(destProjectDir);
-
-                ExtractZipFile(projectName,sourceZip, destProjectDir);
-                
-                fastZipUnpack(appsZip, destProjectDir);
-            }
-            else
-            {
-                Console.WriteLine("Error! Project Directory {0} already exists.");
+                    Run(projectName, directory, js);
+                }
             }
 
             Console.WriteLine("Press <enter> to exit");
             Console.ReadLine();
         }
 
-        public static void ExtractZipFile(string projectName,string archiveFilenameIn, string outFolder)
+        static void Run(string projectName, string targetDir, bool apps = false)
+        {
+            string appDir = AppContext.BaseDirectory;
+            string sourceZip = appDir + "blank.zip";
+            string appsZip = appDir + "apps.zip";
+            string destProjectDir = Path.Combine(targetDir, projectName);
+
+            if (!Directory.Exists(destProjectDir))
+            {
+                Directory.CreateDirectory(destProjectDir);
+
+                ExtractZipFile(projectName, sourceZip, destProjectDir);
+
+                if (apps)
+                {
+                    Console.WriteLine("Unpacking Apps");
+                    fastZipUnpack(appsZip, destProjectDir);
+                }
+
+                Console.WriteLine("Completed. Project is created in {0}", destProjectDir);
+            }
+            else
+            {
+                Console.WriteLine("Error! Project Directory {0} already exists.", destProjectDir);
+            }
+
+        }
+
+        public static void ExtractZipFile(string projectName, string archiveFilenameIn, string outFolder)
         {
             ZipFile zf = null;
 
@@ -81,7 +122,7 @@ namespace ProjectMake
                     zipStream = replaceReferences("Blank.AspNetCore", projectName, zipStream);
 
                     // Manipulate the output filename here as desired.
-                    
+
                     entryFileName = entryFileName.Replace("Blank.AspNetCore", projectName);
 
                     String fullZipToPath = Path.Combine(outFolder, entryFileName);
@@ -99,6 +140,7 @@ namespace ProjectMake
 
                     Console.Write(".");
                 }
+                Console.WriteLine();
             }
             finally
             {
@@ -119,7 +161,7 @@ namespace ProjectMake
             fastZip.ExtractZip(zipFileName, targetDir, null);
         }
 
-        private static Stream replaceReferences(string oldRef,string newRef,Stream stream)
+        private static Stream replaceReferences(string oldRef, string newRef, Stream stream)
         {
             StreamReader sr = new StreamReader(stream);
 
